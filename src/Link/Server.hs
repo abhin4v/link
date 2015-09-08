@@ -5,15 +5,16 @@ import Control.Concurrent (forkFinally, newMVar, modifyMVar, modifyMVar_)
 import Control.Monad      (forever)
 import Network            (withSocketsDo, listenOn, accept, PortID(..))
 import System.IO          (hClose, hSetNewlineMode, hSetBuffering, BufferMode(..),
-                           universalNewlineMode, hGetLine, Handle)
+                           universalNewlineMode, hGetLine, Handle, stdout)
 import Text.Printf        (printf, hPrintf)
 
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 import Link.Types
 
 runServer :: Int -> IO ()
 runServer port = withSocketsDo $ do
+  hSetBuffering stdout LineBuffering
   serverUsers <- newMVar Map.empty
   let server = Server serverUsers
   sock <- listenOn . PortNumber . fromIntegral $ port
@@ -38,12 +39,11 @@ talk server handle = do
         ok <- checkAddClient server user handle
         case ok of
           Nothing -> do
-             hPrintf handle
-                "The name %s is in use, please choose another\n" name
-             readName
+            hPrintf handle
+              "The name %s is in use, please choose another\n" name
+            readName
           Just client ->
-             runClient server client
-                 `finally` removeClient server user
+            runClient server client `finally` removeClient server user
 
 checkAddClient :: Server -> User -> Handle -> IO (Maybe Client)
 checkAddClient Server {..} user@User {..} handle = do
@@ -52,7 +52,7 @@ checkAddClient Server {..} user@User {..} handle = do
       then return (clientMap, Nothing)
       else do
         let client = Client user handle
-        printf "New user connected: %s" userName
+        printf "New user connected: %s\n" userName
         return (Map.insert user client clientMap, Just client)
 
 runClient :: Server -> Client -> IO ()
