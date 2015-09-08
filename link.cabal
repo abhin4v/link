@@ -1,0 +1,46 @@
+name:                link
+version:             0.1.0.0
+synopsis:            A simple multithreded chat server
+description:         Please see README.md
+homepage:            http://github.com/abhin4v/link#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Abhinav Sarkar
+maintainer:          abhinav@abhinavsarkar.net
+copyright:           2010 Abhinav Sarkar
+category:            Network
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Link.Server,
+                       Link.Types
+  default-extensions:  OverloadedStrings, RecordWildCards, ScopedTypeVariables,
+                       BangPatterns, TupleSections, NamedFieldPuns
+  build-depends:       base >= 4.7 && < 5,
+                       network >= 2.6 && < 2.7,
+                       containers >= 0.5 && < 0.6
+  default-language:    Haskell2010
+
+executable link-exe
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , link
+  default-language:    Haskell2010
+
+test-suite link-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , link
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/abhin4v/link
