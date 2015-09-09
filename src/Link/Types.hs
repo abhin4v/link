@@ -26,4 +26,5 @@ data Message = NameInUse UserName
              | Ping
              | Pong
              | PrivMsg User String
+             | NoSuchUser UserName
                deriving (Show, Eq)

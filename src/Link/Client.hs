@@ -38,7 +38,7 @@ runClient Server {..} client@Client {..} = do
   pingThread <- forkIO $ ping clientAlive
   run clientAlive `finally` killThread pingThread
   where
-    pingDelay = 5
+    pingDelay       = 120
     pingDelayMicros = pingDelay * 1000 * 1000
 
     ping clientAlive = do
@@ -65,7 +65,7 @@ runClient Server {..} client@Client {..} = do
                   Left mcommand -> case mcommand of
                     Nothing      -> printf "Could not parse command\n"
                     Just command -> handleCommand command
-                  Right message -> handleMessage message
+                  Right message -> sendResponse message
                 run clientAlive
 
     readCommand = do
@@ -78,10 +78,10 @@ runClient Server {..} client@Client {..} = do
     handleCommand (PrivMsg user msg) =
       withMVar serverUsers $ \clientMap ->
         case Map.lookup user clientMap of
-          Nothing -> printf "No such user: %s\n" (userName user)
+          Nothing      -> sendResponse $ NoSuchUser (userName user)
           Just client' -> sendMessage (PrivMsg clientUser msg) client'
     handleCommand Pong = do
       now <- getCurrentTime
       void $ swapMVar clientPongTime now
 
-    handleMessage = printToHandle clientHandle . formatMessage
+    sendResponse = printToHandle clientHandle . formatMessage

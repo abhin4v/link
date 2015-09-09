@@ -15,3 +15,4 @@ formatMessage (PrivMsg user msg) = printf "PRIVMSG %s %s" (userName user) msg
 formatMessage (NameInUse name)   = printf "NAMEINUSE %s" name
 formatMessage (Connected name)   = printf "CONNECTED %s" name
 formatMessage Ping               = "PING"
+formatMessage (NoSuchUser name)  = printf "NOSUCHUSER %s" name
