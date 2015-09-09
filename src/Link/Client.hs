@@ -26,11 +26,14 @@ race ioa iob = do
     bracket (forkFinally (fmap Right iob) (putMVar m)) killThread $ \_ -> do
       r <- readMVar m
       case r of
-        Left e -> throwIO e
+        Left e  -> throwIO e
         Right a -> return a
 
-sendMessage :: Message -> Client -> IO ()
-sendMessage message Client {..} = writeChan clientChan message
+sendMessage :: Client -> Message -> IO ()
+sendMessage Client {..} = writeChan clientChan
+
+sendResponse :: Client -> Message -> IO ()
+sendResponse Client {..} = printToHandle clientHandle . formatMessage
 
 runClient :: Server -> Client -> IO ()
 runClient Server {..} client@Client {..} = do
@@ -42,7 +45,7 @@ runClient Server {..} client@Client {..} = do
     pingDelayMicros = pingDelay * 1000 * 1000
 
     ping clientAlive = do
-      sendMessage Ping client
+      sendMessage client Ping
       threadDelay pingDelayMicros
       now <- getCurrentTime
       pongTime <- readMVar clientPongTime
@@ -60,12 +63,12 @@ runClient Server {..} client@Client {..} = do
             Left (e :: SomeException) -> printf "Exception: %s\n" (show e)
             Right g -> case g of
               Nothing -> run clientAlive
-              Just cm  -> do
+              Just cm -> do
                 case cm of
                   Left mcommand -> case mcommand of
                     Nothing      -> printf "Could not parse command\n"
                     Just command -> handleCommand command
-                  Right message -> sendResponse message
+                  Right message -> sendResponse client message
                 run clientAlive
 
     readCommand = do
@@ -78,10 +81,8 @@ runClient Server {..} client@Client {..} = do
     handleCommand (PrivMsg user msg) =
       withMVar serverUsers $ \clientMap ->
         case Map.lookup user clientMap of
-          Nothing      -> sendResponse $ NoSuchUser (userName user)
-          Just client' -> sendMessage (PrivMsg clientUser msg) client'
+          Nothing      -> sendResponse client $ NoSuchUser (userName user)
+          Just client' -> sendMessage client' $ PrivMsg clientUser msg
     handleCommand Pong = do
       now <- getCurrentTime
       void $ swapMVar clientPongTime now
-
-    sendResponse = printToHandle clientHandle . formatMessage

@@ -1,8 +1,9 @@
 module Link.Types where
 
+import Control.Concurrent (MVar, Chan)
 import Data.Time (UTCTime)
 import System.IO (Handle)
-import Control.Concurrent (MVar, Chan)
+
 import qualified Data.Map as Map
 
 type UserName = String

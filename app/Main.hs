@@ -1,7 +1,8 @@
 module Main where
 
-import Link.Server
 import System.Environment (getArgs)
+
+import Link.Server
 
 main :: IO ()
 main = do

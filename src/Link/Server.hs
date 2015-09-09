@@ -1,7 +1,7 @@
 module Link.Server where
 
+import Control.Concurrent
 import Control.Exception  hiding (handle)
-import Control.Concurrent hiding (forkFinally)
 import Control.Monad      (forever)
 import Data.Time          (getCurrentTime)
 import Network            (withSocketsDo, listenOn, accept, PortID(..))
@@ -42,11 +42,11 @@ connectClient server handle = do
         let user = User name
         ok <- checkAddClient server user handle
         case ok of
-          Nothing -> do
+          Nothing     -> do
             printToHandle handle $ formatMessage (NameInUse name)
             readName
           Just client -> do
-            printToHandle handle $ formatMessage (Connected name)
+            sendResponse client $ Connected name
             runClient server client `finally` removeClient server user
 
 checkAddClient :: Server -> User -> Handle -> IO (Maybe Client)
@@ -55,13 +55,13 @@ checkAddClient Server {..} user@User {..} handle =
     if Map.member user clientMap
       then return (clientMap, Nothing)
       else do
-        clientChan <- newChan
-        now <- newMVar =<< getCurrentTime
-        let client = Client user handle clientChan now
+        clientChan     <- newChan
+        now            <- getCurrentTime
+        clientPongTime <- newMVar now
+        let client = Client user handle clientChan clientPongTime
         printf "New user connected: %s\n" userName
         return (Map.insert user client clientMap, Just client)
 
 removeClient :: Server -> User -> IO ()
 removeClient Server {..} user =
-  modifyMVar_ serverUsers $ \clientMap ->
-    return $ Map.delete user clientMap
+  modifyMVar_ serverUsers $ return . Map.delete user
