@@ -16,7 +16,8 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Link.Server,
-                       Link.Types
+                       Link.Types,
+                       Link.Protocol
   default-extensions:  OverloadedStrings, RecordWildCards, ScopedTypeVariables,
                        BangPatterns, TupleSections, NamedFieldPuns
   build-depends:       base >= 4.7 && < 5,
