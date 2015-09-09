@@ -1,5 +1,6 @@
 module Link.Types where
 
+import Data.Time (UTCTime)
 import System.IO (Handle)
 import Control.Concurrent (MVar, Chan)
 import qualified Data.Map as Map
@@ -10,9 +11,10 @@ data User = User { userName :: !UserName }
             deriving (Show, Eq, Ord)
 
 data Client = Client {
-                clientUser   :: !User
-              , clientHandle :: !Handle
-              , clientChan   :: !(Chan Message)
+                clientUser     :: !User
+              , clientHandle   :: !Handle
+              , clientChan     :: !(Chan Message)
+              , clientPongTime :: MVar UTCTime
               }
 
 data Server = Server {
@@ -21,5 +23,7 @@ data Server = Server {
 
 data Message = NameInUse UserName
              | Connected UserName
+             | Ping
+             | Pong
              | PrivMsg User String
                deriving (Show, Eq)

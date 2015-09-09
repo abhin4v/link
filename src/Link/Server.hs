@@ -3,6 +3,7 @@ module Link.Server where
 import Control.Exception  hiding (handle)
 import Control.Concurrent hiding (forkFinally)
 import Control.Monad      (forever)
+import Data.Time          (getCurrentTime)
 import Network            (withSocketsDo, listenOn, accept, PortID(..))
 import System.IO          (hClose, hSetNewlineMode, hSetBuffering, BufferMode(..),
                            universalNewlineMode, hGetLine, Handle, stdout)
@@ -25,7 +26,7 @@ runServer port = withSocketsDo $ do
   forever $ do
      (handle, host, port') <- accept sock
      printf "Accepted connection from %s: %s\n" host (show port')
-     forkIO (connectClient server handle) `finally` (hClose handle)
+     forkIO $ connectClient server handle `finally` hClose handle
 
 connectClient :: Server -> Handle -> IO ()
 connectClient server handle = do
@@ -55,7 +56,8 @@ checkAddClient Server {..} user@User {..} handle =
       then return (clientMap, Nothing)
       else do
         clientChan <- newChan
-        let client = Client user handle clientChan
+        now <- newMVar =<< getCurrentTime
+        let client = Client user handle clientChan now
         printf "New user connected: %s\n" userName
         return (Map.insert user client clientMap, Just client)
 
