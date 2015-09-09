@@ -1,8 +1,8 @@
 module Link.Server where
 
-import Control.Exception  (finally)
-import Control.Concurrent (forkFinally, newMVar, modifyMVar, modifyMVar_, newChan,
-                           writeChan, withMVar)
+import Control.Exception  (finally, bracket, throwIO, try, SomeException,
+                           AsyncException(ThreadKilled))
+import Control.Concurrent
 import Control.Monad      (forever)
 import Network            (withSocketsDo, listenOn, accept, PortID(..))
 import System.IO          (hClose, hSetNewlineMode, hSetBuffering, BufferMode(..),
@@ -47,11 +47,8 @@ connectClient server handle = do
           Just client ->
             runClient server client `finally` removeClient server user
 
-sendMessage :: Message -> Client -> IO ()
-sendMessage message Client {..} = writeChan clientChan message
-
 checkAddClient :: Server -> User -> Handle -> IO (Maybe Client)
-checkAddClient Server {..} user@User {..} handle = do
+checkAddClient Server {..} user@User {..} handle =
   modifyMVar serverUsers $ \clientMap ->
     if Map.member user clientMap
       then return (clientMap, Nothing)
@@ -61,19 +58,47 @@ checkAddClient Server {..} user@User {..} handle = do
         printf "New user connected: %s\n" userName
         return (Map.insert user client clientMap, Just client)
 
+race :: IO a -> IO b -> IO (Either a b)
+race ioa iob = do
+  m <- newEmptyMVar
+  bracket (forkFinally (fmap Left ioa) (putMVar m)) cancel $ \_ ->
+    bracket (forkFinally (fmap Right iob) (putMVar m)) cancel $ \_ -> do
+      r <- readMVar m
+      case r of
+        Left e -> throwIO e
+        Right a -> return a
+  where
+    cancel t = throwTo t ThreadKilled
+
+sendMessage :: Message -> Client -> IO ()
+sendMessage message Client {..} = writeChan clientChan message
+
 runClient :: Server -> Client -> IO ()
 runClient Server {..} Client {..} = forever $ do
-  command <- hGetLine clientHandle
-  printf "<%s>: %s\n" (userName clientUser) command
-  case parseCommand command of
-    Nothing -> return ()
-    Just com -> handleCommand com
+  r <- try $ race readCommand readMessage
+  case r of
+    Left (e :: SomeException) -> printf "Exception: %s\n" (show e)
+    Right cm -> case cm of
+      Left mcommand -> case mcommand of
+        Nothing      -> printf "Could not parse command\n"
+        Just command -> handleCommand command
+      Right message -> handleMessage message
   where
-    handleCommand message@(PrivMsg user _) =
+    readCommand = do
+      command <- hGetLine clientHandle
+      printf "<%s>: %s\n" (userName clientUser) command
+      return $ parseCommand command
+
+    readMessage = readChan clientChan
+
+    handleCommand (PrivMsg user msg) =
       withMVar serverUsers $ \clientMap ->
         case Map.lookup user clientMap of
           Nothing -> printf "No such user: %s\n" (userName user)
-          Just client -> sendMessage message client
+          Just client -> sendMessage (PrivMsg clientUser msg) client
+
+    handleMessage (PrivMsg user msg) =
+      hPrintf clientHandle "PRIVMSG %s %s\n" (userName user) msg
 
 removeClient :: Server -> User -> IO ()
 removeClient Server {..} user =
