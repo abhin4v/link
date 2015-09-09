@@ -4,7 +4,9 @@ import System.IO (Handle)
 import Control.Concurrent (MVar, Chan)
 import qualified Data.Map as Map
 
-data User = User { userName :: !String }
+type UserName = String
+
+data User = User { userName :: !UserName }
             deriving (Show, Eq, Ord)
 
 data Client = Client {
@@ -17,5 +19,7 @@ data Server = Server {
                 serverUsers :: MVar (Map.Map User Client)
               }
 
-data Message = PrivMsg User String
+data Message = NameInUse UserName
+             | Connected UserName
+             | PrivMsg User String
                deriving (Show, Eq)

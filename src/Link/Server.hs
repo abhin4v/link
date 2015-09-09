@@ -26,6 +26,9 @@ runServer port = withSocketsDo $ do
      printf "Accepted connection from %s: %s\n" host (show port')
      forkFinally (connectClient server handle) (\_ -> hClose handle)
 
+printToHandle :: Handle -> String -> IO ()
+printToHandle handle str = hPrintf handle "%s\n" str
+
 connectClient :: Server -> Handle -> IO ()
 connectClient server handle = do
   hSetNewlineMode handle universalNewlineMode
@@ -41,10 +44,10 @@ connectClient server handle = do
         ok <- checkAddClient server user handle
         case ok of
           Nothing -> do
-            hPrintf handle
-              "The name %s is in use, please choose another\n" name
+            printToHandle handle $ formatMessage (NameInUse name)
             readName
-          Just client ->
+          Just client -> do
+            printToHandle handle $ formatMessage (Connected name)
             runClient server client `finally` removeClient server user
 
 checkAddClient :: Server -> User -> Handle -> IO (Maybe Client)
@@ -97,8 +100,7 @@ runClient Server {..} Client {..} = forever $ do
           Nothing -> printf "No such user: %s\n" (userName user)
           Just client -> sendMessage (PrivMsg clientUser msg) client
 
-    handleMessage (PrivMsg user msg) =
-      hPrintf clientHandle "PRIVMSG %s %s\n" (userName user) msg
+    handleMessage = printToHandle clientHandle . formatMessage
 
 removeClient :: Server -> User -> IO ()
 removeClient Server {..} user =
