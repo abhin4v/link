@@ -1,9 +1,9 @@
 module Link.Client where
 
-import Control.Concurrent.STM (STM, writeTChan, readTChan, atomically, orElse)
+import Control.Concurrent.STM
 import Control.Concurrent     hiding (forkFinally)
 import Control.Exception      hiding (handle)
-import Control.Monad          (void, forever)
+import Control.Monad          (void, forever, when, unless, forM_)
 import Data.Time              (getCurrentTime, diffUTCTime)
 import System.IO              (hGetLine)
 import System.Timeout         (timeout)
@@ -27,6 +27,9 @@ sendMessage Client {..} = writeTChan clientChan
 sendMessageIO :: Client -> Message -> IO ()
 sendMessageIO client = atomically . sendMessage client
 
+tellMessage :: Channel -> Message -> STM ()
+tellMessage Channel {..} = writeTChan channelChan
+
 sendResponse :: Client -> Message -> IO ()
 sendResponse Client {..} = printToHandle clientHandle . formatMessage
 
@@ -35,7 +38,12 @@ runClient Server {..} client@Client {..} = do
   clientAlive   <- newMVar True
   pingThread    <- forkIO $ ping clientAlive `finally` killClient clientAlive
   commandThread <- forkIO $ readCommands `finally` killClient clientAlive
-  run clientAlive `finally` (killThread pingThread >> killThread commandThread)
+  run clientAlive `finally` do
+    killThread pingThread
+    killThread commandThread
+    clientChannelMap <- readTVarIO clientChannelChans
+    forM_ (Map.keys clientChannelMap) $ \channelName ->
+      handleMessage (Leave channelName) clientAlive
   where
     pingDelay       = 120
     pingDelayMicros = pingDelay * 1000 * 1000
@@ -56,7 +64,9 @@ runClient Server {..} client@Client {..} = do
       if not alive
         then printf "Closing connection: %s\n" (userName clientUser)
         else do
-          r <-  try . timeout pingDelayMicros . atomically . readTChan $ clientChan
+          r <-  try . timeout pingDelayMicros . atomically $ do
+            clientChannelMap <- readTVar clientChannelChans
+            foldr (orElse . readTChan) retry $ clientChan : Map.elems clientChannelMap
           case r of
             Left (e :: SomeException) -> printf "Exception: %s\n" (show e)
             Right g -> do
@@ -77,27 +87,52 @@ runClient Server {..} client@Client {..} = do
         case Map.lookup user clientMap of
           Nothing      -> sendResponse client $ NoSuchUser (userName user)
           Just client' -> sendMessageIO client' $ MsgReply clientUser msg
+
     handleMessage Pong _               = do
       now <- getCurrentTime
       void $ swapMVar clientPongTime now
+
     handleMessage Quit clientAlive     = killClient clientAlive
-    handleMessage (Join channelName) _ = do
-      modifyMVar_ serverChannels $ \channelMap -> do
-        case Map.lookup channelName channelMap of
-          Just (Channel {channelUsers}) -> do
-            modifyMVar_ channelUsers $ return . Set.insert clientUser
-            return channelMap
-          Nothing             -> do
+
+    handleMessage (Join channelName) _ = atomically $ do
+      clientChannelMap <- readTVar clientChannelChans
+      unless (Map.member channelName clientChannelMap) $ do
+        channelMap  <- readTVar serverChannels
+        channel@Channel {channelChan} <- case Map.lookup channelName channelMap of
+          Just (channel@Channel {channelUsers}) -> do
+            modifyTVar' channelUsers $ Set.insert clientUser
+            return channel
+          Nothing                       -> do
             channel <- newChannel channelName $ Set.singleton clientUser
-            return $ Map.insert channelName channel channelMap
-    handleMessage (Leave channelName) _ = do
-      modifyMVar_ serverChannels $ \channelMap -> do
-        case Map.lookup channelName channelMap of
-          Just (Channel {channelUsers}) -> do
-            modifyMVar_ channelUsers $ return . Set.delete clientUser
-            users <- readMVar channelUsers
-            return $ if Set.null users
-              then Map.delete channelName channelMap
-              else channelMap
-          Nothing             -> return channelMap
+            modifyTVar' serverChannels $ Map.insert channelName channel
+            return channel
+        clientChannelChan <- dupTChan channelChan
+        modifyTVar' clientChannelChans $ Map.insert channelName clientChannelChan
+        tellMessage channel $ Joined channelName clientUser
+
+    handleMessage (Leave channelName) _ = atomically $ do
+      channelMap <- readTVar serverChannels
+      case Map.lookup channelName channelMap of
+        Just (channel@Channel {channelUsers}) -> do
+          modifyTVar' channelUsers $ Set.delete clientUser
+          users <- readTVar channelUsers
+          when (Set.null users) $
+            modifyTVar' serverChannels $ Map.delete channelName
+          modifyTVar' clientChannelChans $ Map.delete channelName
+          tellMessage channel $ Leaved channelName clientUser
+        Nothing -> return ()
+
+    handleMessage (Names channelName) _ = atomically $ do
+      channelMap <- readTVar serverChannels
+      users <- case Map.lookup channelName channelMap of
+        Just (Channel {channelUsers}) -> readTVar channelUsers
+        Nothing                       -> return Set.empty
+      sendMessage client $ NamesReply channelName users
+
+    handleMessage (Tell channelName msg) _ = atomically $ do
+      channelMap <- readTVar serverChannels
+      case Map.lookup channelName channelMap of
+        Just channel -> tellMessage channel $ TellReply channelName clientUser msg
+        Nothing      -> return ()
+
     handleMessage message _            = sendResponse client message
