@@ -26,6 +26,7 @@ data Message = NameInUse UserName
              | Connected UserName
              | Ping
              | Pong
-             | PrivMsg User String
+             | Msg User String
              | NoSuchUser UserName
+             | Quit
                deriving (Show, Eq)

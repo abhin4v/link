@@ -56,7 +56,7 @@ runClient Server {..} client@Client {..} = do
     run clientAlive = do
       alive <- readMVar clientAlive
       if not alive
-        then printf "Client timed out: %s\n" (userName clientUser)
+        then printf "Closing connection: %s\n" (userName clientUser)
         else do
           r <-  try . timeout pingDelayMicros $ race readCommand readMessage
           case r of
@@ -67,7 +67,7 @@ runClient Server {..} client@Client {..} = do
                 case cm of
                   Left mcommand -> case mcommand of
                     Nothing      -> printf "Could not parse command\n"
-                    Just command -> handleCommand command
+                    Just command -> handleCommand command clientAlive
                   Right message -> sendResponse client message
                 run clientAlive
 
@@ -78,11 +78,12 @@ runClient Server {..} client@Client {..} = do
 
     readMessage = readChan clientChan
 
-    handleCommand (PrivMsg user msg) =
+    handleCommand (Msg user msg) _ =
       withMVar serverUsers $ \clientMap ->
         case Map.lookup user clientMap of
           Nothing      -> sendResponse client $ NoSuchUser (userName user)
-          Just client' -> sendMessage client' $ PrivMsg clientUser msg
-    handleCommand Pong = do
+          Just client' -> sendMessage client' $ Msg clientUser msg
+    handleCommand Pong _ = do
       now <- getCurrentTime
       void $ swapMVar clientPongTime now
+    handleCommand Quit clientAlive = void $ swapMVar clientAlive False
