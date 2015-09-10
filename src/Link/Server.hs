@@ -40,10 +40,10 @@ connectClient server handle = do
         ok <- checkAddClient server user handle
         case ok of
           Nothing     -> do
-            printToHandle handle $ formatMessage (NameInUse name)
+            printToHandle handle . formatMessage $ NameInUse name
             readName
           Just client -> do
-            sendResponse client $ Connected name
+            printToHandle handle . formatMessage $ Connected name
             runClient server client `finally` removeClient server user
 
 checkAddClient :: Server -> User -> Handle -> IO (Maybe Client)

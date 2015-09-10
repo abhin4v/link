@@ -1,7 +1,7 @@
 module Link.Client where
 
 import Control.Concurrent.STM
-import Control.Concurrent     hiding (forkFinally)
+import Control.Concurrent
 import Control.Exception      hiding (handle)
 import Control.Monad          (void, forever, when, unless, forM_)
 import Data.Time              (getCurrentTime, diffUTCTime)
@@ -14,11 +14,6 @@ import qualified Data.Set as Set
 
 import Link.Protocol
 import Link.Types
-
-forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
-forkFinally action fun =
-  mask $ \restore ->
-    forkIO (do r <- try (restore action); fun r)
 
 sendMessage :: Client -> Message -> STM ()
 sendMessage Client {..} = writeTChan clientChan
