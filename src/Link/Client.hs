@@ -10,6 +10,7 @@ import System.Timeout         (timeout)
 import Text.Printf            (printf)
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import Link.Protocol
 import Link.Types
@@ -71,13 +72,32 @@ runClient Server {..} client@Client {..} = do
         Nothing -> printf "Could not parse command: %s\n" command
         Just c  -> sendMessageIO client c
 
-    handleMessage (Msg user msg) _ =
+    handleMessage (Msg user msg) _     =
       withMVar serverUsers $ \clientMap ->
         case Map.lookup user clientMap of
           Nothing      -> sendResponse client $ NoSuchUser (userName user)
           Just client' -> sendMessageIO client' $ MsgReply clientUser msg
-    handleMessage Pong _           = do
+    handleMessage Pong _               = do
       now <- getCurrentTime
       void $ swapMVar clientPongTime now
-    handleMessage Quit clientAlive = killClient clientAlive
-    handleMessage message _        = sendResponse client message
+    handleMessage Quit clientAlive     = killClient clientAlive
+    handleMessage (Join channelName) _ = do
+      modifyMVar_ serverChannels $ \channelMap -> do
+        case Map.lookup channelName channelMap of
+          Just (Channel {channelUsers}) -> do
+            modifyMVar_ channelUsers $ return . Set.insert clientUser
+            return channelMap
+          Nothing             -> do
+            channel <- newChannel channelName $ Set.singleton clientUser
+            return $ Map.insert channelName channel channelMap
+    handleMessage (Leave channelName) _ = do
+      modifyMVar_ serverChannels $ \channelMap -> do
+        case Map.lookup channelName channelMap of
+          Just (Channel {channelUsers}) -> do
+            modifyMVar_ channelUsers $ return . Set.delete clientUser
+            users <- readMVar channelUsers
+            return $ if Set.null users
+              then Map.delete channelName channelMap
+              else channelMap
+          Nothing             -> return channelMap
+    handleMessage message _            = sendResponse client message
