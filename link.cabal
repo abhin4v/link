@@ -19,7 +19,6 @@ library
                        Link.Types,
                        Link.Protocol,
                        Link.Client
-  other-modules:       Link.Util
   default-extensions:  OverloadedStrings, RecordWildCards, ScopedTypeVariables,
                        BangPatterns, TupleSections, NamedFieldPuns
   build-depends:       base >= 4.7 && < 5,

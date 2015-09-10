@@ -19,13 +19,14 @@ parseCommand command = case words command of
 
 formatMessage :: Message -> String
 formatMessage (MsgReply user msg)       = printf "MSG %s %s" (userName user) msg
-formatMessage (TellReply channelName user msg) =
-  printf "TELL %s %s %s" channelName (userName user) msg
 formatMessage (NameInUse name)          = printf "NAMEINUSE %s" name
 formatMessage (Connected name)          = printf "CONNECTED %s" name
 formatMessage Ping                      = "PING"
 formatMessage (NoSuchUser name)         = printf "NOSUCHUSER %s" name
 formatMessage (Joined channelName user) = printf "JOINED %s %s" channelName (userName user)
 formatMessage (Leaved channelName user) = printf "LEFT %s %s" channelName (userName user)
-formatMessage (NamesReply channelName users) =
+formatMessage (TellReply channelName user msg) =
+  printf "TELL %s %s %s" channelName (userName user) msg
+formatMessage (NamesReply channelName users)   =
   printf "NAMES %s %s" channelName . unwords . map userName . Set.toList $ users
+formatMessage msg = error $ printf "Cannot format message: %s" (show msg)

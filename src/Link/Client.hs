@@ -5,16 +5,15 @@ import Control.Concurrent     hiding (forkFinally)
 import Control.Exception      hiding (handle)
 import Control.Monad          (void, forever, when, unless, forM_)
 import Data.Time              (getCurrentTime, diffUTCTime)
-import System.IO              (hGetLine)
+import System.IO              (hGetLine, Handle)
 import System.Timeout         (timeout)
-import Text.Printf            (printf)
+import Text.Printf            (printf, hPrintf)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Link.Protocol
 import Link.Types
-import Link.Util
 
 forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
 forkFinally action fun =
@@ -29,6 +28,9 @@ sendMessageIO client = atomically . sendMessage client
 
 tellMessage :: Channel -> Message -> STM ()
 tellMessage Channel {..} = writeTChan channelChan
+
+printToHandle :: Handle -> String -> IO ()
+printToHandle handle = hPrintf handle "%s\n"
 
 sendResponse :: Client -> Message -> IO ()
 sendResponse Client {..} = printToHandle clientHandle . formatMessage
@@ -53,7 +55,7 @@ runClient Server {..} client@Client {..} = do
     ping clientAlive = do
       sendMessageIO client Ping
       threadDelay pingDelayMicros
-      now <- getCurrentTime
+      now      <- getCurrentTime
       pongTime <- readMVar clientPongTime
       if diffUTCTime now pongTime > fromIntegral pingDelay
         then killClient clientAlive
@@ -102,7 +104,7 @@ runClient Server {..} client@Client {..} = do
           Just (channel@Channel {channelUsers}) -> do
             modifyTVar' channelUsers $ Set.insert clientUser
             return channel
-          Nothing                       -> do
+          Nothing                               -> do
             channel <- newChannel channelName $ Set.singleton clientUser
             modifyTVar' serverChannels $ Map.insert channelName channel
             return channel
@@ -120,11 +122,11 @@ runClient Server {..} client@Client {..} = do
             modifyTVar' serverChannels $ Map.delete channelName
           modifyTVar' clientChannelChans $ Map.delete channelName
           tellMessage channel $ Leaved channelName clientUser
-        Nothing -> return ()
+        Nothing                               -> return ()
 
     handleMessage (Names channelName) _ = atomically $ do
       channelMap <- readTVar serverChannels
-      users <- case Map.lookup channelName channelMap of
+      users      <- case Map.lookup channelName channelMap of
         Just (Channel {channelUsers}) -> readTVar channelUsers
         Nothing                       -> return Set.empty
       sendMessage client $ NamesReply channelName users

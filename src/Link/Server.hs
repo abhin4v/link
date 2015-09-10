@@ -13,7 +13,6 @@ import qualified Data.Map.Strict as Map
 import Link.Client
 import Link.Protocol
 import Link.Types
-import Link.Util
 
 runServer :: Int -> IO ()
 runServer port = withSocketsDo $ do
