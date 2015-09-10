@@ -1,13 +1,14 @@
 module Link.Server where
 
 import Control.Concurrent
-import Control.Exception  hiding (handle)
-import Control.Monad      (forever)
-import Data.Time          (getCurrentTime)
-import Network            (withSocketsDo, listenOn, accept, PortID(..))
-import System.IO          (hClose, hSetNewlineMode, hSetBuffering, BufferMode(..),
-                           universalNewlineMode, hGetLine, Handle, stdout)
-import Text.Printf        (printf)
+import Control.Concurrent.STM (newTChanIO)
+import Control.Exception      hiding (handle)
+import Control.Monad          (forever)
+import Data.Time              (getCurrentTime)
+import Network                (withSocketsDo, listenOn, accept, PortID(..))
+import System.IO              (hClose, hSetNewlineMode, hSetBuffering, BufferMode(..),
+                               universalNewlineMode, hGetLine, Handle, stdout)
+import Text.Printf            (printf)
 
 import qualified Data.Map.Strict as Map
 
@@ -19,8 +20,10 @@ import Link.Util
 runServer :: Int -> IO ()
 runServer port = withSocketsDo $ do
   hSetBuffering stdout LineBuffering
+
   serverUsers <- newMVar Map.empty
   let server = Server serverUsers
+
   sock <- listenOn . PortNumber . fromIntegral $ port
   printf "Listening on port %d\n" port
   forever $ do
@@ -55,7 +58,7 @@ checkAddClient Server {..} user@User {..} handle =
     if Map.member user clientMap
       then return (clientMap, Nothing)
       else do
-        clientChan     <- newChan
+        clientChan     <- newTChanIO
         now            <- getCurrentTime
         clientPongTime <- newMVar now
         let client = Client user handle clientChan clientPongTime

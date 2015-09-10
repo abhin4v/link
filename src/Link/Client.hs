@@ -1,12 +1,13 @@
 module Link.Client where
 
-import Control.Concurrent hiding (forkFinally)
-import Control.Exception  hiding (handle)
-import Control.Monad      (void)
-import Data.Time          (getCurrentTime, diffUTCTime)
-import System.IO          (hGetLine)
-import System.Timeout     (timeout)
-import Text.Printf        (printf)
+import Control.Concurrent.STM (STM, writeTChan, readTChan, atomically, orElse)
+import Control.Concurrent     hiding (forkFinally)
+import Control.Exception      hiding (handle)
+import Control.Monad          (void, forever)
+import Data.Time              (getCurrentTime, diffUTCTime)
+import System.IO              (hGetLine)
+import System.Timeout         (timeout)
+import Text.Printf            (printf)
 
 import qualified Data.Map.Strict as Map
 
@@ -19,38 +20,34 @@ forkFinally action fun =
   mask $ \restore ->
     forkIO (do r <- try (restore action); fun r)
 
-race :: IO a -> IO b -> IO (Either a b)
-race ioa iob = do
-  m <- newEmptyMVar
-  bracket (forkFinally (fmap Left ioa) (putMVar m)) killThread $ \_ ->
-    bracket (forkFinally (fmap Right iob) (putMVar m)) killThread $ \_ -> do
-      r <- readMVar m
-      case r of
-        Left e  -> throwIO e
-        Right a -> return a
+sendMessage :: Client -> Message -> STM ()
+sendMessage Client {..} = writeTChan clientChan
 
-sendMessage :: Client -> Message -> IO ()
-sendMessage Client {..} = writeChan clientChan
+sendMessageIO :: Client -> Message -> IO ()
+sendMessageIO client = atomically . sendMessage client
 
 sendResponse :: Client -> Message -> IO ()
 sendResponse Client {..} = printToHandle clientHandle . formatMessage
 
 runClient :: Server -> Client -> IO ()
 runClient Server {..} client@Client {..} = do
-  clientAlive <- newMVar True
-  pingThread <- forkIO $ ping clientAlive
-  run clientAlive `finally` killThread pingThread
+  clientAlive   <- newMVar True
+  pingThread    <- forkIO $ ping clientAlive `finally` killClient clientAlive
+  commandThread <- forkIO $ readCommands `finally` killClient clientAlive
+  run clientAlive `finally` (killThread pingThread >> killThread commandThread)
   where
     pingDelay       = 120
     pingDelayMicros = pingDelay * 1000 * 1000
 
+    killClient clientAlive = void $ swapMVar clientAlive False
+
     ping clientAlive = do
-      sendMessage client Ping
+      sendMessageIO client Ping
       threadDelay pingDelayMicros
       now <- getCurrentTime
       pongTime <- readMVar clientPongTime
       if diffUTCTime now pongTime > fromIntegral pingDelay
-        then void $ swapMVar clientAlive False
+        then killClient clientAlive
         else ping clientAlive
 
     run clientAlive = do
@@ -58,32 +55,29 @@ runClient Server {..} client@Client {..} = do
       if not alive
         then printf "Closing connection: %s\n" (userName clientUser)
         else do
-          r <-  try . timeout pingDelayMicros $ race readCommand readMessage
+          r <-  try . timeout pingDelayMicros . atomically . readTChan $ clientChan
           case r of
             Left (e :: SomeException) -> printf "Exception: %s\n" (show e)
-            Right g -> case g of
-              Nothing -> run clientAlive
-              Just cm -> do
-                case cm of
-                  Left mcommand -> case mcommand of
-                    Nothing      -> printf "Could not parse command\n"
-                    Just command -> handleCommand command clientAlive
-                  Right message -> sendResponse client message
-                run clientAlive
+            Right g -> do
+              case g of
+                Nothing      -> return ()
+                Just message -> handleMessage message clientAlive
+              run clientAlive
 
-    readCommand = do
+    readCommands = forever $ do
       command <- hGetLine clientHandle
       printf "<%s>: %s\n" (userName clientUser) command
-      return $ parseCommand command
+      case parseCommand command of
+        Nothing -> printf "Could not parse command: %s\n" command
+        Just c  -> sendMessageIO client c
 
-    readMessage = readChan clientChan
-
-    handleCommand (Msg user msg) _ =
+    handleMessage (Msg user msg) _ =
       withMVar serverUsers $ \clientMap ->
         case Map.lookup user clientMap of
           Nothing      -> sendResponse client $ NoSuchUser (userName user)
-          Just client' -> sendMessage client' $ Msg clientUser msg
-    handleCommand Pong _ = do
+          Just client' -> sendMessageIO client' $ MsgReply clientUser msg
+    handleMessage Pong _           = do
       now <- getCurrentTime
       void $ swapMVar clientPongTime now
-    handleCommand Quit clientAlive = void $ swapMVar clientAlive False
+    handleMessage Quit clientAlive = killClient clientAlive
+    handleMessage message _        = sendResponse client message

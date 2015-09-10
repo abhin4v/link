@@ -12,8 +12,8 @@ parseCommand command = case words command of
   _                      -> Nothing
 
 formatMessage :: Message -> String
-formatMessage (Msg user msg)    = printf "MSG %s %s" (userName user) msg
-formatMessage (NameInUse name)  = printf "NAMEINUSE %s" name
-formatMessage (Connected name)  = printf "CONNECTED %s" name
-formatMessage Ping              = "PING"
-formatMessage (NoSuchUser name) = printf "NOSUCHUSER %s" name
+formatMessage (MsgReply user msg) = printf "MSG %s %s" (userName user) msg
+formatMessage (NameInUse name)    = printf "NAMEINUSE %s" name
+formatMessage (Connected name)    = printf "CONNECTED %s" name
+formatMessage Ping                = "PING"
+formatMessage (NoSuchUser name)   = printf "NOSUCHUSER %s" name
