@@ -54,7 +54,7 @@ newServer = do
   return $ Server serverUsers serverChannels
 
 data Message = NameInUse UserName
-             | Connected UserName
+             | LoggedIn UserName
              | Ping
              | MsgReply User String
              | TellReply ChannelName User String
@@ -63,6 +63,7 @@ data Message = NameInUse UserName
              | Leaved ChannelName User
              | NamesReply ChannelName (Set.Set User)
              | Pong
+             | Login UserName
              | Msg User String
              | Tell ChannelName String
              | Join ChannelName
