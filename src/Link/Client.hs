@@ -92,31 +92,49 @@ runClient Server {..} client@Client {..} = do
     handleMessage Quit clientAlive     = killClient clientAlive
 
     handleMessage (Join channelName) _ = atomically $ do
+      -- get user's channels
       clientChannelMap <- readTVar clientChannelChans
+      -- if user has not already joined the channel
       unless (Map.member channelName clientChannelMap) $ do
-        channelMap  <- readTVar serverChannels
+        -- get server channels
+        channelMap <- readTVar serverChannels
         channel@Channel {channelChan} <- case Map.lookup channelName channelMap of
           Just (channel@Channel {channelUsers}) -> do
+            -- if the channel already exists on the server, add user to it
             modifyTVar' channelUsers $ Set.insert clientUser
             return channel
           Nothing                               -> do
+            -- else create a new channel with this user in it
             channel <- newChannel channelName $ Set.singleton clientUser
+            -- and add it to the server
             modifyTVar' serverChannels $ Map.insert channelName channel
             return channel
+        -- duplicate channel TChan for this user
         clientChannelChan <- dupTChan channelChan
+        -- and add it to the users's channels
         modifyTVar' clientChannelChans $ Map.insert channelName clientChannelChan
+        -- send a JOINED message to the channel for this user
         tellMessage channel $ Joined channelName clientUser
 
     handleMessage (Leave channelName) _ = atomically $ do
+      -- get server channels
       channelMap <- readTVar serverChannels
       case Map.lookup channelName channelMap of
+        -- if channel exists on the server
         Just (channel@Channel {channelUsers}) -> do
+          -- remove this user from the channel
           modifyTVar' channelUsers $ Set.delete clientUser
+          -- get users in the channel
           users <- readTVar channelUsers
+          -- if there are no users in the channel
           when (Set.null users) $
+            -- remove the channel from the server
             modifyTVar' serverChannels $ Map.delete channelName
+          -- remove the channel from the user's channels
           modifyTVar' clientChannelChans $ Map.delete channelName
+          -- send a LEFT message to the channel for this user
           tellMessage channel $ Leaved channelName clientUser
+        -- nothing to do if the channel does not exist
         Nothing                               -> return ()
 
     handleMessage (Names channelName) _ = atomically $ do
