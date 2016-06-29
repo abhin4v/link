@@ -2,6 +2,10 @@ A simple mutli-threaded chat server written in Haskell with support for
 user-to-user private messaging and channels which users can join and
 chat in.
 
+This project is the accompanying code for the presentation [Introduction To Concurrency In Haskell][1] delivered at [Functional Conf 2015][3], Bangalore. Slides for the same are available [here][2].
+
+## Usage
+
 Run server:
 
 ```
@@ -37,3 +41,7 @@ Messages from the server:
 - `TELL <channel> <username> <message>` A message from a channel you have joined
 - `PING` A ping from the server. Must be replied with a `PONG` command or else
    the server will disconnect you.
+
+[1]: https://www.youtube.com/watch?v=uVK3t-5wWew
+[2]: https://speakerdeck.com/abhin4v/introduction-to-concurrency-in-haskell
+[3]: https://confengine.com/functional-conf-2015/proposal/1298/introduction-to-concurrency-in-haskell
