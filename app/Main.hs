@@ -6,6 +6,6 @@ import Link.Server
 
 main :: IO ()
 main = do
-  port <- fmap (read . (!! 0)) getArgs
+  port <- fmap (read . head) getArgs
   runServer port
 
