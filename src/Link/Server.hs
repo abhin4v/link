@@ -2,10 +2,11 @@ module Link.Server where
 
 import Control.Concurrent
 import Control.Exception  hiding (handle)
-import Control.Monad      (forever)
+import Control.Monad      (forever, join)
 import Network            (withSocketsDo, listenOn, accept, PortID(..))
 import System.IO          (hClose, hSetNewlineMode, hSetBuffering, BufferMode(..),
                            universalNewlineMode, hGetLine, Handle, stdout)
+import System.Timeout     (timeout)
 import Text.Printf        (printf)
 
 import qualified Data.Map.Strict as Map
@@ -31,10 +32,14 @@ connectClient server handle = do
   hSetBuffering handle LineBuffering
   readName
   where
+    waitDelay       = 60
+    waitDelayMicros = waitDelay * 1000 * 1000
+
     readName = do
-      command <- fmap parseCommand $ hGetLine handle
+      command <- timeout waitDelayMicros . fmap parseCommand $ hGetLine handle
       case command of
-        Just (Login name) -> do
+        Nothing -> printf "Client login timed out\n" >> return ()
+        Just (Just (Login name)) -> do
           let user = User name
           ok <- checkAddClient server user handle
           case ok of
