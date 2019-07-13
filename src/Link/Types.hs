@@ -53,7 +53,8 @@ newServer = do
   serverChannels <- newTVarIO Map.empty
   return $ Server serverUsers serverChannels
 
-data Message = NameInUse UserName
+data Message = -- Server messages
+               NameInUse UserName
              | LoggedIn UserName
              | Ping
              | MsgReply User String
@@ -62,6 +63,8 @@ data Message = NameInUse UserName
              | Joined ChannelName User
              | Leaved ChannelName User
              | NamesReply ChannelName (Set.Set User)
+             | InvalidMessage String
+               -- Client messages
              | Pong
              | Login UserName
              | Msg User String

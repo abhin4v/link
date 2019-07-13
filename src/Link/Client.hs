@@ -6,6 +6,7 @@ import Control.Exception      hiding (handle)
 import Control.Monad          (void, forever, when, unless, forM_)
 import Data.Time              (getCurrentTime, diffUTCTime)
 import System.IO              (hGetLine, Handle)
+import System.IO.Error        (isEOFError)
 import System.Timeout         (timeout)
 import Text.Printf            (printf, hPrintf)
 
@@ -72,12 +73,23 @@ runClient Server {..} client@Client {..} = do
                 Just message -> handleMessage message clientAlive
               run clientAlive
 
-    readCommands = forever $ do
-      command <- hGetLine clientHandle
-      printf "<%s>: %s\n" (userName clientUser) command
-      case parseCommand command of
-        Nothing -> printf "Could not parse command: %s\n" command
-        Just c  -> sendMessageIO client c
+    readCommands = do
+      ecommand <- try $ hGetLine clientHandle
+      case ecommand of
+        Left (e :: IOException) | isEOFError e -> do
+          printf "<%s>: connection closed\n" (userName clientUser)
+          sendMessageIO client Quit
+        Left (e :: IOException) -> do
+          printf "Exception: %s\n" (show e)
+          sendMessageIO client Quit
+        Right command -> do
+          printf "<%s>: %s\n" (userName clientUser) command
+          case parseCommand command of
+            Nothing -> do
+              printf "Could not parse command: %s\n" command
+              sendMessageIO client $ InvalidMessage command
+            Just c  -> sendMessageIO client c
+          readCommands
 
     handleMessage (Msg user msg) _     =
       withMVar serverUsers $ \clientMap ->

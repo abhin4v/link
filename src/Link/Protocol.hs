@@ -1,9 +1,7 @@
 module Link.Protocol where
 
 import Text.Printf (printf)
-
 import qualified Data.Set as Set
-
 import Link.Types
 
 parseCommand :: String -> Maybe Message
@@ -26,6 +24,7 @@ formatMessage Ping                      = "PING"
 formatMessage (NoSuchUser name)         = printf "NOSUCHUSER %s" name
 formatMessage (Joined channelName user) = printf "JOINED %s %s" channelName (userName user)
 formatMessage (Leaved channelName user) = printf "LEFT %s %s" channelName (userName user)
+formatMessage (InvalidMessage msg)      = printf "INVALIDMESSAGE %s" msg
 formatMessage (TellReply channelName user msg) =
   printf "TELL %s %s %s" channelName (userName user) msg
 formatMessage (NamesReply channelName users)   =
